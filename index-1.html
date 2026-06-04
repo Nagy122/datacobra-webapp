@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Data Cobra X</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: var(--tg-theme-bg-color, #1a1a2e);
+    color: var(--tg-theme-text-color, #ffffff);
+    min-height: 100vh;
+    direction: rtl;
+  }
+
+  .screen { display: none; padding: 12px; animation: fadeIn 0.2s ease; }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ===== رسالة الترحيب ===== */
+  .welcome-msg {
+    background: var(--tg-theme-secondary-bg-color, #16213e);
+    border-radius: 16px;
+    padding: 18px 16px;
+    margin-bottom: 12px;
+    text-align: center;
+    line-height: 2;
+    font-size: 16px;
+  }
+  .welcome-msg .username {
+    color: #4fc3f7;
+    font-weight: bold;
+    font-size: 18px;
+    letter-spacing: 1px;
+  }
+
+  /* ===== شبكة الأزرار الرئيسية ===== */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .btn {
+    border: none;
+    border-radius: 12px;
+    padding: 14px 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    direction: rtl;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: opacity 0.15s, transform 0.1s;
+    width: 100%;
+  }
+  .btn:active { opacity: 0.75; transform: scale(0.97); }
+
+  /* الأزرار الحمرا — القائمة الرئيسية */
+  .btn-red {
+    background: #c0392b;
+    color: #ffffff;
+  }
+
+  /* زر أزرق عريض */
+  .btn-blue {
+    background: #2980b9;
+    color: #ffffff;
+  }
+
+  /* زر أخضر */
+  .btn-green {
+    background: #27ae60;
+    color: #ffffff;
+  }
+
+  /* زر بني/رجوع */
+  .btn-brown {
+    background: #8B5E3C;
+    color: #ffffff;
+  }
+
+  /* زر عريض كامل العرض */
+  .btn-full { grid-column: 1 / -1; }
+
+  /* ===== شاشة الخدمة ===== */
+  .service-card {
+    background: var(--tg-theme-secondary-bg-color, #16213e);
+    border-radius: 16px;
+    padding: 18px 16px;
+    margin-bottom: 12px;
+    text-align: center;
+    line-height: 2;
+    font-size: 16px;
+  }
+  .service-card .owner-tag {
+    color: #f39c12;
+    font-weight: bold;
+    font-size: 15px;
+    margin-top: 8px;
+  }
+
+  /* ===== شبكة سحب البيانات ===== */
+  .data-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  /* ===== شاشة أرقام فيك ===== */
+  .numbers-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  /* ===== تفاصيل المالك/المطور ===== */
+  .details-card {
+    background: var(--tg-theme-secondary-bg-color, #16213e);
+    border-radius: 16px;
+    padding: 18px 16px;
+    margin-bottom: 12px;
+    line-height: 2.2;
+    font-size: 15px;
+  }
+  .details-card .title {
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .details-card a {
+    color: #4fc3f7;
+    text-decoration: none;
+  }
+  .details-card .diamond { color: #4fc3f7; }
+
+  /* ===== فحص كاش ===== */
+  .cash-card {
+    background: var(--tg-theme-secondary-bg-color, #16213e);
+    border-radius: 16px;
+    padding: 18px 16px;
+    margin-bottom: 12px;
+    text-align: center;
+    line-height: 2;
+    font-size: 16px;
+  }
+
+  .section-title {
+    text-align: center;
+    font-size: 17px;
+    font-weight: bold;
+    margin-bottom: 12px;
+    opacity: 0.9;
+  }
+
+  /* واتساب نتيجة */
+  .whatsapp-desc {
+    text-align: right;
+    line-height: 2.2;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== الشاشة الرئيسية ===== -->
+<div id="screen-main" class="screen active">
+  <div class="welcome-msg">
+    👋 أهلاً <span class="username">NAGYSALEM</span>!<br>
+    🤖 مرحباً بك في بوت خدماتنا المتكاملة<br>
+    📌 اختر من القائمة السفلية ما تريد:
+  </div>
+
+  <div class="main-grid">
+    <button class="btn btn-red" onclick="showScreen('screen-data')">🐉 خدمات سحب البيانات</button>
+    <button class="btn btn-red" onclick="showScreen('screen-buy-sell')">🔵 بيع وشراء أكونتات</button>
+    <button class="btn btn-red" onclick="showScreen('screen-numbers')">📞 أرقام فيك</button>
+    <button class="btn btn-red" onclick="showScreen('screen-gifts')">🎁 هدايا تليجرام</button>
+    <button class="btn btn-red" onclick="showScreen('screen-owner')">😷 تفاصيل المالك</button>
+    <button class="btn btn-red" onclick="showScreen('screen-dev')">😷 تفاصيل المطور</button>
+  </div>
+  <div>
+    <button class="btn btn-blue btn-full" onclick="showScreen('screen-cash')">💳 فحص كاش 🗒️</button>
+  </div>
+</div>
+
+<!-- ===== شاشة سحب البيانات - اختيار الخدمة ===== -->
+<div id="screen-data" class="screen">
+  <div class="service-card">
+    خدمات سحب البيانات<br><br>
+    اختر الخدمة:
+  </div>
+  <div class="data-grid">
+    <button class="btn btn-blue" onclick="showService('vodafone')">🔴 فودافون</button>
+    <button class="btn btn-blue" onclick="showService('etisalat')">🔴 اتصالات</button>
+    <button class="btn btn-blue" onclick="showService('we')">🐉 وي</button>
+    <button class="btn btn-blue" onclick="showService('orange')">🟠 أورنج</button>
+    <button class="btn btn-blue" onclick="showService('ntra_sector')">🔴 قسم نترا</button>
+    <button class="btn btn-blue" onclick="showService('ntra_family')">🔴 قيد عائلي نترا</button>
+  </div>
+  <button class="btn btn-brown btn-full" onclick="showScreen('screen-main')">⬅️ BACK رجوع للقائمة</button>
+</div>
+
+<!-- ===== شاشة تفاصيل الخدمة ===== -->
+<div id="screen-service-detail" class="screen">
+  <div class="service-card" id="service-detail-text">
+  </div>
+  <button class="btn btn-green btn-full" id="btn-buy" onclick="openOwner()">🛒 شراء</button>
+  <br>
+  <button class="btn btn-brown btn-full" onclick="showScreen('screen-data')">⬅️ BACK رجوع</button>
+</div>
+
+<!-- ===== شاشة أرقام فيك ===== -->
+<div id="screen-numbers" class="screen">
+  <div class="service-card">
+    أرقام فيك<br><br>
+    اختر التطبيق:
+  </div>
+  <div class="numbers-grid">
+    <button class="btn btn-blue" onclick="showNumbers('whatsapp')">📱 واتساب</button>
+    <button class="btn btn-blue" onclick="showNumbers('telegram')">✈️ تليجرام</button>
+    <button class="btn btn-blue" onclick="showNumbers('imo')">📞 إيمو</button>
+    <button class="btn btn-brown" onclick="showScreen('screen-main')">⬅️ رجوع</button>
+  </div>
+</div>
+
+<!-- ===== شاشة تفاصيل الأرقام ===== -->
+<div id="screen-numbers-detail" class="screen">
+  <div class="service-card" id="numbers-detail-text"></div>
+  <button class="btn btn-blue btn-full" id="btn-numbers-contact" onclick="openOwner()">📩 تواصل مع المالك ✉️</button>
+  <br>
+  <button class="btn btn-brown btn-full" onclick="showScreen('screen-numbers')">⬅️ BACK رجوع</button>
+</div>
+
+<!-- ===== شاشة بيع وشراء أكونتات ===== -->
+<div id="screen-buy-sell" class="screen">
+  <div class="service-card">
+    🔵 بيع وشراء أكونتات<br><br>
+    للشراء أو البيع تواصل مع المالك مباشرة:
+  </div>
+  <button class="btn btn-green btn-full" onclick="openOwner()">📩 تواصل للشراء/البيع ↗️</button>
+  <br>
+  <button class="btn btn-brown btn-full" onclick="showScreen('screen-main')">⬅️ BACK رجوع للقائمة</button>
+</div>
+
+<!-- ===== شاشة هدايا تليجرام ===== -->
+<div id="screen-gifts" class="screen">
+  <div class="service-card">
+    🎁 هدايا تليجرام<br><br>
+    للاستفسار عن الهدايا المتاحة تواصل مع المالك:
+  </div>
+  <button class="btn btn-green btn-full" onclick="openOwner()">📩 تواصل مع المالك ↗️</button>
+  <br>
+  <button class="btn btn-brown btn-full" onclick="showScreen('screen-main')">⬅️ BACK رجوع للقائمة</button>
+</div>
+
+<!-- ===== شاشة تفاصيل المالك ===== -->
+<div id="screen-owner" class="screen">
+  <div class="details-card">
+    <div class="title">😷 تفاصيل المالك</div>
+    <span class="diamond">💠</span> الاسم: المالك<br>
+    <span class="diamond">💠</span> اليوزر: <a href="https://t.me/Nagy918">@Nagy918</a><br>
+    <span class="diamond">💠</span> الـ ID: 1059743894<br><br>
+    👑 مالك البوت ومسؤول المبيعات<br>
+    ✅ تواصل معه للشراء أو الاستفسار<br><br>
+    🔗 القناة: <a href="https://t.me/cobra_x_channel">https://t.me/cobra_x_channel</a><br><br>
+    💡 للتواصل اضغط أحد الأزرار أدناه:
+  </div>
+  <button class="btn btn-blue btn-full" onclick="window.Telegram.WebApp.openLink('https://t.me/cobra_x_channel')">📢 قناة المالك 📣 ↗️</button>
+  <br>
+  <button class="btn btn-green btn-full" onclick="openOwner()">👑 تواصل مع المالك ↗️</button>
+  <br>
+  <button class="btn btn-brown btn-full" onclick="showScreen('screen-main')">⬅️ BACK رجوع للقائمة</button>
+</div>
+
+<!-- ===== شاشة تفاصيل المطور ===== -->
+<div id="screen-dev" class="screen">
+  <div class="details-card">
+    <div class="title">😷 تفاصيل المطور</div>
+    <span class="diamond">💠</span> الاسم: المطور<br>
+    <span class="diamond">💠</span> اليوزر: <a href="https://t.me/Nagy918">@Nagy918</a><br>
+    <span class="diamond">💠</span> الـ ID: 1059743894<br><br>
+    💡 مطور بوتات تليجرام محترف<br>
+    🔧 خبرة في جميع خدمات السوشيال ميديا<br><br>
+    🤖 البوت: <a href="https://t.me/cobra_services_bot">@cobra_services_bot</a><br><br>
+    🔗 القناة: <a href="https://t.me/cobra_x_channel">https://t.me/cobra_x_channel</a><br><br>
+    💡 للتواصل اضغط أحد الأزرار أدناه:
+  </div>
+  <button class="btn btn-blue btn-full" onclick="window.Telegram.WebApp.openLink('https://t.me/cobra_x_channel')">📢 القناة الرسمية 📣 ↗️</button>
+  <br>
+  <button class="btn btn-green btn-full" onclick="window.Telegram.WebApp.openLink('https://t.me/Nagy918')">👨‍💻 تواصل مع المطور ↗️</button>
+  <br>
+  <button class="btn btn-brown btn-full" onclick="showScreen('screen-main')">⬅️ BACK رجوع للقائمة</button>
+</div>
+
+<!-- ===== شاشة فحص كاش ===== -->
+<div id="screen-cash" class="screen">
+  <div class="cash-card">
+    💳 فحص اسم صاحب محفظة فودافون كاش<br><br>
+    📱 أرسل رقم الهاتف المراد الاستعلام عنه<br>
+    (11 رقم يبدأ بـ 01)
+  </div>
+  <button class="btn btn-brown btn-full" onclick="showScreen('screen-main')">❌ إلغاء</button>
+</div>
+
+<script>
+  // تهيئة تليجرام WebApp
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+  tg.expand();
+
+  // بيانات الخدمات
+  const SERVICES = {
+    vodafone:    { name: "فودافون",        emoji: "🔴", price: 155, desc: "خدمة سحب بيانات فودافون" },
+    etisalat:    { name: "اتصالات",        emoji: "🔴", price: 200, desc: "خدمة سحب بيانات اتصالات" },
+    we:          { name: "وي",             emoji: "🐉", price: 130, desc: "خدمة سحب بيانات وي" },
+    orange:      { name: "أورنج",          emoji: "🟠", price: 130, desc: "خدمة سحب بيانات أورنج" },
+    ntra_sector: { name: "قسم نترا",       emoji: "🔴", price: 200, desc: "خدمة سحب بيانات قسم نترا" },
+    ntra_family: { name: "قيد عائلي نترا", emoji: "🔴", price: 550, desc: "خدمة القيد العائلي نترا" },
+  };
+
+  const NUMBERS = {
+    whatsapp: {
+      emoji: "📱",
+      title: "أرقام فيك لواتساب",
+      desc: `<div class="whatsapp-desc">🇪🇬 مصري 50<br>🇸🇦 سعودي 135<br>🇺🇸 أمريكي 50</div>`,
+      price: 50,
+      available: true
+    },
+    telegram: {
+      emoji: "✈️",
+      title: "أرقام فيك لتليجرام",
+      desc: "❌ لا يوجد أرقام تليجرام متاحة حالياً.",
+      available: false
+    },
+    imo: {
+      emoji: "📞",
+      title: "أرقام فيك لإيمو",
+      desc: "❌ لا يوجد أرقام إيمو متاحة حالياً.",
+      available: false
+    }
+  };
+
+  const OWNER_USERNAME = "Nagy918";
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  function showService(key) {
+    const s = SERVICES[key];
+    document.getElementById('service-detail-text').innerHTML =
+      `${s.emoji} ${s.desc}<br>🎟️ سعر الخدمة: ${s.price} جنيه<br><br><span style="color:#f39c12;font-weight:bold;">👑 @${OWNER_USERNAME}</span>`;
+    document.getElementById('btn-buy').textContent = `🛒 شراء — ${s.price} جنيه`;
+    showScreen('screen-service-detail');
+  }
+
+  function showNumbers(key) {
+    const n = NUMBERS[key];
+    document.getElementById('numbers-detail-text').innerHTML =
+      `${n.emoji} ${n.title}<br><br>${n.desc}<br><br><span style="color:#f39c12;font-weight:bold;">👑 @${OWNER_USERNAME}</span>`;
+    const btnContact = document.getElementById('btn-numbers-contact');
+    if (n.available) {
+      btnContact.textContent = `🛒 شراء — ${n.price} جنيه`;
+    } else {
+      btnContact.textContent = "📩 تواصل مع المالك ✉️";
+    }
+    showScreen('screen-numbers-detail');
+  }
+
+  function openOwner() {
+    tg.openLink(`https://t.me/${OWNER_USERNAME}`);
+  }
+
+  // تحديث اسم المستخدم
+  if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+    const user = tg.initDataUnsafe.user;
+    const name = user.first_name || "صديقي";
+    document.querySelector('.username').textContent = name.toUpperCase();
+  }
+</script>
+</body>
+</html>
