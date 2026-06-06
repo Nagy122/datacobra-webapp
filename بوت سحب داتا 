@@ -1,0 +1,1512 @@
+import logging
+import requests
+import uuid
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    ReplyKeyboardMarkup, KeyboardButton
+)
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler,
+    MessageHandler, filters, ContextTypes
+)
+
+# ==================== إعدادات البوت ====================
+TOKEN = "8924167956:AAGiodDe1S5Ojb4nEShk3P_DHiRw79AyLeI"
+
+# قناة المالك (للاشتراك الإجباري)
+OWNER_CHANNEL_USERNAME = "Nagy918"
+OWNER_CHANNEL_LINK     = "https://t.me/cobra_x_channel"
+
+# بيانات المطور الأصلي
+DEVELOPER_USERNAME = "Nagy918"
+DEVELOPER_LINK     = "https://t.me/CobraXGroup"
+DEVELOPER_ID       = 1059743894
+
+# بيانات المالك الجديد
+OWNER_USERNAME = "Nagy918"
+OWNER_ID       = 1059743894
+OWNER_LINK = "https://t.me/Nagy918"
+
+# قائمة الأدمن (المطور + المالك)
+ADMIN_IDS = [DEVELOPER_ID, OWNER_ID]
+
+# قائمة الأدمن المساعدين (قابلة للتعديل)
+SUB_ADMIN_IDS = []
+
+# قائمة المستخدمين الذين فعّلوا البوت
+bot_users = set()
+
+# ==================== رقم فودافون كاش (قابل للتغيير) ====================
+VODAFONE_CASH_NUMBER = "01091874118"
+
+# ==================== بيانات تسجيل دخول فحص كاش ====================
+CASH_CHECK_PHONE    = "01024048588"
+CASH_CHECK_PASSWORD = "Samir1122@"
+CASH_DEVICE_ID      = "5410d95ad4bb11cc"
+CASH_DIGITAL_ID     = "2A2EABH5DY98Q"
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+def is_admin(user_id: int) -> bool:
+    """يرجع True إذا كان المستخدم أدمن رئيسي أو مساعد"""
+    return user_id in ADMIN_IDS or user_id in SUB_ADMIN_IDS
+
+def is_main_admin(user_id: int) -> bool:
+    """يرجع True فقط للأدمن الرئيسيين (المطور والمالك)"""
+    return user_id in ADMIN_IDS
+
+# ==================== بيانات الأزرار القابلة للتعديل ==================== 
+buttons_config = {
+    "vodafone": {
+        "label":   "فودافون",
+        "details": "<tg-emoji emoji-id='5990140421865478630'>📡</tg-emoji> خدمة سحب بيانات فودافون\n🎊 سعر الخدمة: 125 جنيه",
+        "price":   "125 جنيه",
+        "link":    "",
+        "emoji_id": "5990140421865478630",
+    },
+    "etisalat": {
+        "label":   "اتصالات",
+        "details": "<tg-emoji emoji-id='5992388124280363362'>📡</tg-emoji> خدمة سحب بيانات اتصالات\n🎊 سعر الخدمة: 170 جنيه",
+        "price":   "170 جنيه",
+        "link":    "",
+        "emoji_id": "5992388124280363362",
+    },
+    "we": {
+        "label":   "وي",
+        "details": "<tg-emoji emoji-id='5992572584535791371'>🐉</tg-emoji> خدمة سحب بيانات وي\n🎊 سعر الخدمة: 105 جنيه",
+        "price":   "105 جنيه",
+        "link":    "",
+        "emoji_id": "5992572584535791371",
+    },
+    "orange": {
+        "label":   "أورنج",
+        "details": "<tg-emoji emoji-id='5992409113785539809'>📡</tg-emoji> خدمة سحب بيانات أورنج\n🎊 سعر الخدمة: 105 جنيه",
+        "price":   "105 جنيه",
+        "link":    "",
+        "emoji_id": "5992409113785539809",
+    },
+    "acc_facebook": {
+        "label":   "فيسبوك",
+        "details": "<tg-emoji emoji-id='5389064576333527180'>📘</tg-emoji> أكونتات فيسبوك\n\n❌ لا يوجد أكونتات فيسبوك متاحة للبيع حالياً.",
+        "price":   "",
+        "link":    "",
+        "emoji_id": "5389064576333527180",
+    },
+    "acc_instagram": {
+        "label":   "إنستجرام",
+        "details": "<tg-emoji emoji-id='5364310996179503764'>📸</tg-emoji> أكونتات إنستجرام\n\n❌ لا يوجد أكونتات إنستجرام متاحة للبيع حالياً.",
+        "price":   "",
+        "link":    "",
+        "emoji_id": "5364310996179503764",
+    },
+    "acc_telegram": {
+        "label":   "تليجرام",
+        "details": "<tg-emoji emoji-id='5364125616801073577'>✈️</tg-emoji> أكونتات تليجرام\n\n❌ لا يوجد أكونتات تليجرام متاحة للبيع حالياً.",
+        "price":   "",
+        "link":    "",
+        "emoji_id": "5364125616801073577",
+    },
+    "acc_tiktok": {
+        "label":   "تيك توك",
+        "details": "<tg-emoji emoji-id='5391044040860906456'>🎵</tg-emoji> أكونتات تيك توك\n\n❌ لا يوجد أكونتات تيك توك متاحة للبيع حالياً.",
+        "price":   "",
+        "link":    "",
+        "emoji_id": "5391044040860906456",
+    },
+    "acc_youtube": {
+        "label":   "يوتيوب",
+        "details": "<tg-emoji emoji-id='5321505140199418151'>▶️</tg-emoji> أكونتات يوتيوب\n\n❌ لا يوجد أكونتات يوتيوب متاحة للبيع حالياً.",
+        "price":   "",
+        "link":    "",
+        "emoji_id": "5321505140199418151",
+    },
+    "num_whatsapp": {
+        "label":   "واتساب",
+        "details": "<tg-emoji emoji-id='5233354831984353090'>💬</tg-emoji> أرقام فيك لواتساب\n\nمصري 50 🇪🇬\nسعودي 135 🇸🇦\nأمريكي 50 🇺🇸",
+        "price":   "50 جنيه",
+        "link":    "",
+        "emoji_id": "5233354831984353090",
+    },
+    "num_telegram": {
+        "label":   "تليجرام",
+        "details": "<tg-emoji emoji-id='5364125616801073577'>✈️</tg-emoji> أرقام فيك لتليجرام\n\n❌ لا يوجد أرقام تليجرام متاحة حالياً.",
+        "price":   "",
+        "link":    "",
+        "emoji_id": "5364125616801073577",
+    },
+    "num_imo": {
+        "label":   "إيمو",
+        "details": "<tg-emoji emoji-id='5859518547859869809'>📞</tg-emoji> أرقام فيك لإيمو\n\n❌ لا يوجد أرقام إيمو متاحة حالياً.",
+        "price":   "",
+        "link":    "",
+        "emoji_id": "5859518547859869809",
+    },
+    "natra": {
+        "label":   "قسم نترا",
+        "details": "<tg-emoji emoji-id='5992388124280363362'>📡</tg-emoji> خدمة سحب بيانات نترا\n🎊 سعر الخدمة: 200 جنيه",
+        "price":   "200 جنيه",
+        "link":    "",
+        "emoji_id": "5992388124280363362",
+        "enabled": True,
+    },
+    "natra_family": {
+        "label":   "قيد عائلي نترا",
+        "details": "<tg-emoji emoji-id='5992388124280363362'>📄</tg-emoji> خدمة القيد العائلي نترا\n🎊 سعر الخدمة: 550 جنيه",
+        "price":   "550 جنيه",
+        "link":    "",
+        "emoji_id": "5992388124280363362",
+        "enabled": True,
+    },
+}
+
+# ==================== الخدمات التي تدعم نظام الشراء بالكاش ====================
+# كل خدمة عندها سعر → تظهر زرار شراء بدل تواصل مع المالك
+PURCHASABLE_SERVICES = ["vodafone", "etisalat", "we", "orange",
+                        "num_whatsapp", "num_telegram", "num_imo",
+                        "acc_facebook", "acc_instagram", "acc_telegram",
+                        "acc_tiktok", "acc_youtube", "natra", "natra_family"]
+
+# ==================== حالة تشغيل/إيقاف الأزرار ====================
+# True = مفعّل, False = معطّل (تظهر رسالة "الخدمة غير متاحة حالياً")
+button_enabled_states = {
+    "vodafone": True, "etisalat": True, "we": True, "orange": True,
+    "acc_facebook": True, "acc_instagram": True, "acc_telegram": True,
+    "acc_tiktok": True, "acc_youtube": True,
+    "num_whatsapp": True, "num_telegram": True, "num_imo": True,
+    "natra": True, "natra_family": True,
+}
+
+# ==================== بيانات الهدايا ====================
+products_data = {
+    "gifts": [
+        {"name": "🌙 هلال", "price": "500 جنيه", "link": "https://t.me/nft/FaithAmulet-124512"},
+    ]
+}
+
+# ==================== معلومات المطور الأصلي ====================
+developer_info = {
+    "name":      "المطور",
+    "username":  DEVELOPER_USERNAME,
+    "id":        DEVELOPER_ID,
+    "bio":       "💡 مطور بوتات تليجرام محترف\n🔧 خبرة في جميع خدمات السوشيال ميديا",
+    "channel":   "https://t.me/Nagy918",
+    "contact":   DEVELOPER_LINK,
+    "photo_id":  "",
+}
+
+# ==================== معلومات المالك الجديد ====================
+owner_info = {
+    "name":      "المالك",
+    "username":  OWNER_USERNAME,
+    "id":        OWNER_ID,
+    "bio":       "👑 مالك البوت ومسؤول المبيعات\n✅ تواصل معه للشراء أو الاستفسار",
+    "channel":   OWNER_CHANNEL_LINK,
+    "contact":   OWNER_LINK,
+    "photo_id":  "",
+}
+
+# ==================== الحالات ====================
+admin_state  = {}   # حالة الأدمن
+user_state   = {}   # حالة المستخدم (انتظار إرسال سكرين التحويل)
+# طلبات الشراء المعلقة: {order_id: {...}}
+pending_orders = {}
+order_counter  = [0]  # عداد الطلبات
+
+# ==================== أسماء أزرار القائمة السفلية ====================
+BTN_DATA      = "خدمات سحب البيانات"
+BTN_ACCOUNTS  = "بيع وشراء أكونتات"
+BTN_NUMBERS   = "أرقام فيك"
+BTN_GIFTS     = "هدايا تليجرام"
+BTN_OWNER     = "تفاصيل المالك"
+BTN_DEV       = "تفاصيل المطور"
+BTN_ADMIN     = "لوحة التحكم"
+BTN_CASHCHECK = "فحص كاش 💳"
+
+# ==================== لوحة المفاتيح السفلية ====================
+def reply_keyboard(user_id: int = None):
+    keyboard = [
+        [
+            KeyboardButton(BTN_DATA, style="danger", icon_custom_emoji_id="5992572584535791371"),
+            KeyboardButton(BTN_ACCOUNTS, style="danger", icon_custom_emoji_id="5852806433099225341")
+        ],
+        [
+            KeyboardButton(BTN_NUMBERS, style="danger", icon_custom_emoji_id="5859518547859869809"),
+            KeyboardButton(BTN_GIFTS, style="danger", icon_custom_emoji_id="5970074171449808121")
+        ],
+        [
+            KeyboardButton(BTN_OWNER, style="danger", icon_custom_emoji_id="5444965061749644170"),
+            KeyboardButton(BTN_DEV, style="danger", icon_custom_emoji_id="5444965061749644170")
+        ],
+        [
+            KeyboardButton(BTN_CASHCHECK, style="primary", icon_custom_emoji_id="5433653135799228968"),
+        ],
+    ]
+    if user_id in ADMIN_IDS or user_id in SUB_ADMIN_IDS:
+        keyboard.append([KeyboardButton(BTN_ADMIN, style="danger", icon_custom_emoji_id="4967490064234840998")])
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
+
+# ==================== التحقق من الاشتراك ====================
+async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        member = await context.bot.get_chat_member(chat_id=OWNER_CHANNEL_USERNAME, user_id=user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        logger.warning(f"check_subscription error for {user_id}: {e}")
+        return True
+
+async def subscription_required_msg(message):
+    await message.reply_text(
+        "⚠️ يجب عليك الاشتراك في قناة المالك أولاً!\n\n"
+        "📢 اشترك ثم اضغط /start مرة أخرى",
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("📢 اشترك في القناة الآن", url=OWNER_CHANNEL_LINK)]]
+        )
+    )
+
+# ==================== /start ====================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    bot_users.add(user.id)  # تسجيل المستخدم
+    if not is_admin(user.id):
+        if not await check_subscription(user.id, context):
+            await subscription_required_msg(update.message)
+            return
+    await update.message.reply_text(
+        f"<tg-emoji emoji-id='5859691201250201986'>👋</tg-emoji> أهلاً {user.first_name}!\n\n"
+        "<tg-emoji emoji-id='6174896506051495705'>🤖</tg-emoji> مرحباً بك في بوت خدماتنا المتكاملة\n\n"
+        "<tg-emoji emoji-id='4956232383721374836'>📌</tg-emoji> اختر من القائمة السفلية ما تريد:",
+        reply_markup=reply_keyboard(user.id),
+        parse_mode="HTML"
+    )
+
+# ==================== فحص كاش - دوال API ====================
+def cash_login(username, password):
+    url = "https://mobile.vodafone.com.eg/auth/realms/vf-realm/protocol/openid-connect/token"
+    payload = {
+        'grant_type': "password",
+        'username': username,
+        'password': password,
+        'client_secret': "95fd95fb-7489-4958-8ae6-d31a525cd20a",
+        'client_id': "ana-vodafone-app"
+    }
+    headers = {
+        'User-Agent': "okhttp/4.11.0",
+        'Accept': "application/json",
+        'Accept-Encoding': "gzip",
+        'silentLogin': "false",
+        'x-agent-operatingsystem': "15",
+        'Accept-Language': "ar",
+        'x-agent-device': "HONOR ALI-NX1",
+        'x-agent-version': "2025.11.1.1"
+    }
+    try:
+        response = requests.post(url, data=payload, headers=headers, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        if 'access_token' in data:
+            return True, data['access_token'], username
+        return False, None, None
+    except Exception:
+        return False, None, None
+
+def search_wallet_owner(access_token, sender_msisdn, target_number):
+    url = "https://mobile.vodafone.com.eg/services/dxl/paymentmng/payment"
+    params = {
+        'payer.id': sender_msisdn,
+        '$.paymentMethod.relatedParty.id': target_number,
+        '$.amount.value': "1",
+        '$.account.type': "Vodafone Consumer",
+        '@type': "CashMandate"
+    }
+    headers = {
+        'User-Agent': "okhttp/4.12.0",
+        'Connection': "close",
+        'Accept': "application/json",
+        'Accept-Encoding': "gzip",
+        'X-Request-ID': str(uuid.uuid4()),
+        'device-id': CASH_DEVICE_ID,
+        'Content-Type': "application/json",
+        'api-version': "v2",
+        'msisdn': sender_msisdn,
+        'Authorization': f"Bearer {access_token}",
+        'Accept-Language': "ar",
+        'clientId': "AnaVodafoneAndroid",
+        'digitalId': CASH_DIGITAL_ID
+    }
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0]
+                if 'paymentMethod' in item and 'relatedParty' in item['paymentMethod']:
+                    name = item['paymentMethod']['relatedParty'].get('name')
+                    if name:
+                        return name
+            elif isinstance(data, dict):
+                if 'paymentMethod' in data and 'relatedParty' in data['paymentMethod']:
+                    name = data['paymentMethod']['relatedParty'].get('name')
+                    if name:
+                        return name
+        return None
+    except Exception:
+        return None
+
+# ==================== معالج الرسائل النصية ====================
+async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    text = update.message.text
+
+    # حالة الأدمن أولاً
+    state = admin_state.get(user.id)
+    if state and is_admin(user.id):
+        await handle_admin_input(update, context, text, state)
+        return
+
+    # حالة المستخدم (انتظار رقم الهاتف للفحص أو رقم التحويل)
+    ustate = user_state.get(user.id)
+    if ustate:
+        await handle_user_state(update, context, text, ustate)
+        return
+
+    if not is_admin(user.id):
+        bot_users.add(user.id)
+        if not await check_subscription(user.id, context):
+            await subscription_required_msg(update.message)
+            return
+
+    if text == BTN_DATA:
+        keyboard = [
+            [
+                InlineKeyboardButton(buttons_config["vodafone"]["label"], callback_data="vodafone", icon_custom_emoji_id=buttons_config["vodafone"]["emoji_id"], style="primary"),
+                InlineKeyboardButton(buttons_config["etisalat"]["label"], callback_data="etisalat", icon_custom_emoji_id=buttons_config["etisalat"]["emoji_id"], style="primary")
+            ],
+            [
+                InlineKeyboardButton(buttons_config["we"]["label"], callback_data="we", icon_custom_emoji_id=buttons_config["we"]["emoji_id"], style="primary"),
+                InlineKeyboardButton(buttons_config["orange"]["label"], callback_data="orange", icon_custom_emoji_id=buttons_config["orange"]["emoji_id"], style="primary")
+            ],
+            [
+                InlineKeyboardButton(buttons_config["natra"]["label"], callback_data="natra", icon_custom_emoji_id=buttons_config["natra"]["emoji_id"], style="primary"),
+                InlineKeyboardButton(buttons_config["natra_family"]["label"], callback_data="natra_family", icon_custom_emoji_id=buttons_config["natra_family"]["emoji_id"], style="primary")
+            ],
+            [InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="back_main", style="danger")],
+        ]
+        await update.message.reply_text(
+            "خدمات سحب البيانات\n\nاختر الخدمة:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif text == BTN_ACCOUNTS:
+        keyboard = [
+            [
+                InlineKeyboardButton(buttons_config["acc_facebook"]["label"], callback_data="acc_facebook", icon_custom_emoji_id=buttons_config["acc_facebook"]["emoji_id"], style="success"),
+                InlineKeyboardButton(buttons_config["acc_instagram"]["label"], callback_data="acc_instagram", icon_custom_emoji_id=buttons_config["acc_instagram"]["emoji_id"], style="success")
+            ],
+            [
+                InlineKeyboardButton(buttons_config["acc_telegram"]["label"], callback_data="acc_telegram", icon_custom_emoji_id=buttons_config["acc_telegram"]["emoji_id"], style="success"),
+                InlineKeyboardButton(buttons_config["acc_tiktok"]["label"], callback_data="acc_tiktok", icon_custom_emoji_id=buttons_config["acc_tiktok"]["emoji_id"], style="success")
+            ],
+            [
+                InlineKeyboardButton(buttons_config["acc_youtube"]["label"], callback_data="acc_youtube", icon_custom_emoji_id=buttons_config["acc_youtube"]["emoji_id"], style="success")
+            ],
+            [InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="back_main", style="danger")],
+        ]
+        await update.message.reply_text(
+            "بيع وشراء أكونتات السوشيال ميديا\n\nاختر المنصة:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif text == BTN_NUMBERS:
+        keyboard = [
+            [
+                InlineKeyboardButton(buttons_config["num_whatsapp"]["label"], callback_data="num_whatsapp", icon_custom_emoji_id=buttons_config["num_whatsapp"]["emoji_id"], style="primary"),
+                InlineKeyboardButton(buttons_config["num_telegram"]["label"], callback_data="num_telegram", icon_custom_emoji_id=buttons_config["num_telegram"]["emoji_id"], style="primary")
+            ],
+            [
+                InlineKeyboardButton(buttons_config["num_imo"]["label"], callback_data="num_imo", icon_custom_emoji_id=buttons_config["num_imo"]["emoji_id"], style="primary"),
+                InlineKeyboardButton("🔙 رجوع", callback_data="back_main", style="danger")
+            ],
+        ]
+        await update.message.reply_text(
+            "أرقام فيك\n\nاختر التطبيق:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif text == BTN_GIFTS:
+        gifts = products_data["gifts"]
+        msg = "<tg-emoji emoji-id='5970074171449808121'>🎁</tg-emoji> هدايا تليجرام المتاحة للبيع:\n\n"
+        if not gifts:
+            msg += "❌ لا توجد هدايا متاحة حالياً."
+        else:
+            for i, g in enumerate(gifts, 1):
+                msg += f"{i}. {g['name']} — 💰 {g['price']}"
+                if g.get("link"):
+                    msg += f"\n   🔗 {g['link']}"
+                msg += "\n\n"
+        keyboard = [
+            [InlineKeyboardButton("📩 تواصل للشراء مع المالك", url=OWNER_LINK, style="success")],
+            [InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="back_main", style="danger")],
+        ]
+        await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif text == BTN_OWNER:
+        await send_owner_info(update.message)
+
+    elif text == BTN_DEV:
+        await send_developer_info(update.message)
+
+    elif text == BTN_CASHCHECK:
+        await handle_cash_check_start(update.message, user)
+
+    elif text == BTN_ADMIN:
+        if not is_admin(user.id):
+            await update.message.reply_text("⛔ ليس لديك صلاحية!", reply_markup=reply_keyboard(user.id))
+            return
+        await send_admin_panel(update.message, user.id)
+
+    else:
+        # البوت لا يستجيب لأي نص خارج الأزرار المعرّفة
+        return
+
+# ==================== فحص كاش - بداية ====================
+async def handle_cash_check_start(message, user):
+    user_state[user.id] = {"action": "cash_check_waiting_number"}
+    keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_state", style="danger")]]
+    await message.reply_text(
+        "💳 <b>فحص اسم صاحب محفظة فودافون كاش</b>\n\n"
+        "📱 أرسل رقم الهاتف المراد الاستعلام عنه\n"
+        "<i>(11 رقم يبدأ بـ 01)</i>",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
+    )
+
+# ==================== معالج حالة المستخدم ====================
+async def handle_user_state(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, ustate: dict):
+    user   = update.effective_user
+    action = ustate.get("action")
+
+    if action == "cash_check_waiting_number":
+        target = text.strip()
+        if not target.startswith("01") or len(target) != 11 or not target.isdigit():
+            await update.message.reply_text(
+                "❌ رقم غير صحيح!\nيجب أن يبدأ بـ 01 ويتكون من 11 رقم فقط.\n\nأرسل الرقم مرة أخرى:"
+            )
+            return
+        del user_state[user.id]
+        wait_msg = await update.message.reply_text("🔍 جاري البحث في فودافون كاش...")
+        success, token, msisdn = cash_login(CASH_CHECK_PHONE, CASH_CHECK_PASSWORD)
+        if not success:
+            await wait_msg.edit_text("❌ خطأ في الاتصال بالخادم. حاول مرة أخرى لاحقاً.")
+            return
+        name = search_wallet_owner(token, msisdn, target)
+        if name:
+            result_text = (
+                f"✅ <b>تم العثور على صاحب المحفظة</b>\n\n"
+                f"📱 الرقم: <code>{target}</code>\n"
+                f"👤 الاسم: <b>{name}</b>\n\n"
+                f"✅ هذا الرقم مسجل في فودافون كاش ولديه محفظة نشطة."
+            )
+        else:
+            result_text = (
+                f"❌ <b>لم يتم العثور على نتيجة</b>\n\n"
+                f"📱 الرقم: <code>{target}</code>\n\n"
+                f"⚠️ إما أن الرقم غير مسجل في فودافون كاش، أو المحفظة غير مفعلة."
+            )
+        keyboard = [[InlineKeyboardButton("🔍 بحث عن رقم آخر", callback_data="cashcheck_again", style="primary")]]
+        await wait_msg.edit_text(result_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    elif action == "waiting_transfer_phone":
+        # المستخدم بعت رقم الهاتف اللي حوّل منه
+        phone = text.strip()
+        if not phone.startswith("01") or len(phone) != 11 or not phone.isdigit():
+            await update.message.reply_text("❌ رقم غير صحيح! أرسل رقم 11 خانة يبدأ بـ 01:")
+            return
+        ustate["transfer_phone"] = phone
+        ustate["action"]         = "waiting_target_number"
+        user_state[user.id]      = ustate
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_state", style="danger")]]
+        await update.message.reply_text(
+            f"✅ تم تسجيل رقم التحويل: <code>{phone}</code>\n\n"
+            "📱 الآن أرسل <b>رقم الهاتف المراد سحب بياناته</b>:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    elif action == "waiting_target_number":
+        # المستخدم بعت رقم الهاتف المراد سحب بياناته
+        target = text.strip()
+        if not target.startswith("01") or len(target) != 11 or not target.isdigit():
+            await update.message.reply_text("❌ رقم غير صحيح! أرسل رقم 11 خانة يبدأ بـ 01:")
+            return
+        ustate["target_number"] = target
+        ustate["action"]        = "waiting_transfer_screenshot"
+        user_state[user.id]     = ustate
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_state", style="danger")]]
+        await update.message.reply_text(
+            f"✅ تم تسجيل الرقم المراد سحب بياناته: <code>{target}</code>\n\n"
+            "📸 الآن أرسل <b>صورة إيصال التحويل (سكرين شوت)</b>:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+# ==================== معالج الصور ====================
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user   = update.effective_user
+
+    # حالة أدمن: تعديل صورة المطور
+    state = admin_state.get(user.id)
+    if state and user.id in ADMIN_IDS and state.get("action") == "edit_dev_photo":
+        photo = update.message.photo[-1]
+        developer_info["photo_id"] = photo.file_id
+        del admin_state[user.id]
+        keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة المطور", callback_data="admin_manage_dev", style="danger")]]
+        await update.message.reply_text(
+            "✅ تم حفظ صورة المطور بنجاح!",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    # حالة المستخدم: إرسال سكرين التحويل
+    ustate = user_state.get(user.id)
+    if ustate and ustate.get("action") == "waiting_transfer_screenshot":
+        photo      = update.message.photo[-1]
+        file_id    = photo.file_id
+        order_id   = ustate["order_id"]
+        service_key = ustate["service_key"]
+        cfg         = buttons_config[service_key]
+
+        order_counter[0] += 1
+        oid = order_counter[0]
+
+        pending_orders[oid] = {
+            "user_id":        user.id,
+            "user_name":      user.full_name,
+            "username":       user.username or "لا يوجد",
+            "service_key":    service_key,
+            "service_label":  cfg["label"],
+            "price":          cfg.get("price", ""),
+            "transfer_phone": ustate["transfer_phone"],
+            "target_number":  ustate.get("target_number", "غير محدد"),
+            "screenshot_id":  file_id,
+            "status":         "pending",
+        }
+        del user_state[user.id]
+
+        # إرسال الطلب للمطور/المالك
+        order_text = (
+            f"🛒 <b>طلب شراء جديد #{oid}</b>\n\n"
+            f"👤 الاسم: {user.full_name}\n"
+            f"🆔 اليوزر: @{user.username or 'لا يوجد'}\n"
+            f"🔢 الـ ID: <code>{user.id}</code>\n\n"
+            f"📦 الخدمة: {cfg['label']}\n"
+            f"💰 السعر: {cfg.get('price','')}\n\n"
+            f"📱 رقم التحويل (حوّل منه): <code>{ustate['transfer_phone']}</code>\n"
+            f"🎯 الرقم المراد سحب بياناته: <code>{ustate.get('target_number', 'غير محدد')}</code>\n"
+            f"📸 السكرين: مرفق أدناه\n\n"
+            f"⏳ الحالة: بانتظار التسليم"
+        )
+        deliver_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"✅ تسليم البيانات #{oid}", callback_data=f"deliver_{oid}", style="success")]
+        ])
+        for admin_id in ADMIN_IDS:
+            try:
+                await context.bot.send_photo(
+                    chat_id=admin_id,
+                    photo=file_id,
+                    caption=order_text,
+                    reply_markup=deliver_keyboard,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to notify admin {admin_id}: {e}")
+
+        await update.message.reply_text(
+            "✅ <b>تم إرسال طلبك بنجاح!</b>\n\n"
+            f"🔢 رقم الطلب: <b>#{oid}</b>\n\n"
+            "⏳ سيتم مراجعة طلبك وتسليم البيانات قريباً.\n"
+            "📩 ستستقبل البيانات هنا في البوت مباشرة.",
+            parse_mode="HTML"
+        )
+
+# ==================== عرض معلومات المالك ====================
+async def send_owner_info(message):
+    owner   = owner_info
+    caption = (
+        "<tg-emoji emoji-id='5444965061749644170'>👑</tg-emoji> تفاصيل المالك\n\n"
+        f"🔹 الاسم: {owner['name']}\n"
+        f"🔹 اليوزر: @{owner['username']}\n"
+        f"🔹 الـ ID: {owner['id']}\n\n"
+        f"{owner['bio']}\n\n"
+        f"🔗 القناة: {owner['channel']}\n\n"
+        "💡 للتواصل اضغط أحد الأزرار أدناه:"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 قناة المالك",      url=owner["channel"], style="primary")],
+        [InlineKeyboardButton("👑 تواصل مع المالك",  url=owner["contact"], style="success")],
+        [InlineKeyboardButton("🔙 رجوع للقائمة",    callback_data="back_main", style="danger")],
+    ])
+    photo = owner.get("photo_id", "")
+    if photo:
+        try:
+            await message.reply_photo(photo=photo, caption=caption, reply_markup=keyboard, parse_mode="HTML")
+            return
+        except Exception as e:
+            logger.warning(f"Failed to send owner photo: {e}")
+    await message.reply_text(caption, reply_markup=keyboard, parse_mode="HTML")
+
+# ==================== عرض معلومات المطور ====================
+async def send_developer_info(message):
+    dev     = developer_info
+    caption = (
+        "<tg-emoji emoji-id='5444965061749644170'>👨‍💻</tg-emoji> تفاصيل المطور\n\n"
+        f"🔹 الاسم: {dev['name']}\n"
+        f"🔹 اليوزر: @{dev['username']}\n"
+        f"🔹 الـ ID: {dev['id']}\n\n"
+        f"{dev['bio']}\n\n"
+        f"🔗 القناة: {dev['channel']}\n\n"
+        "💡 للتواصل اضغط أحد الأزرار أدناه:"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 القناة الرسمية",     url=dev["channel"], style="primary")],
+        [InlineKeyboardButton("👨‍💻 تواصل مع المطور",  url=dev["contact"], style="success")],
+        [InlineKeyboardButton("🔙 رجوع للقائمة",       callback_data="back_main", style="danger")],
+    ])
+    photo = dev.get("photo_id", "")
+    if photo:
+        try:
+            await message.reply_photo(photo=photo, caption=caption, reply_markup=keyboard, parse_mode="HTML")
+            return
+        except Exception as e:
+            logger.warning(f"Failed to send developer photo: {e}")
+    await message.reply_text(caption, reply_markup=keyboard, parse_mode="HTML")
+
+# ==================== معالج أزرار Inline ====================
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    try:
+        await query.answer()
+    except Exception as e:
+        logger.warning(f"Failed to answer callback query: {e}")
+
+    user = query.from_user
+    data = query.data
+
+    if not is_admin(user.id):
+        bot_users.add(user.id)
+        if not await check_subscription(user.id, context):
+            await subscription_required_msg(query.message)
+            return
+
+    # ========== إلغاء حالة المستخدم ==========
+    if data == "cancel_user_state":
+        user_state.pop(user.id, None)
+        await query.edit_message_text("❌ تم الإلغاء.")
+        return
+
+    # ========== فحص كاش مرة أخرى ==========
+    elif data == "cashcheck_again":
+        user_state[user.id] = {"action": "cash_check_waiting_number"}
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_state", style="danger")]]
+        await query.edit_message_text(
+            "🔍 أرسل رقم الهاتف المراد الاستعلام عنه (11 رقم يبدأ بـ 01):",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    # ========== الرجوع ==========
+    elif data == "back_main":
+        await query.edit_message_text(
+            "<tg-emoji emoji-id='4956232383721374836'>📌</tg-emoji> اختر من القائمة السفلية ما تريد 👇",
+            parse_mode="HTML"
+        )
+        return
+
+    elif data == "back_data":
+        keyboard = [
+            [
+                InlineKeyboardButton(buttons_config["vodafone"]["label"], callback_data="vodafone", icon_custom_emoji_id=buttons_config["vodafone"]["emoji_id"], style="primary"),
+                InlineKeyboardButton(buttons_config["etisalat"]["label"], callback_data="etisalat", icon_custom_emoji_id=buttons_config["etisalat"]["emoji_id"], style="primary")
+            ],
+            [
+                InlineKeyboardButton(buttons_config["we"]["label"], callback_data="we", icon_custom_emoji_id=buttons_config["we"]["emoji_id"], style="primary"),
+                InlineKeyboardButton(buttons_config["orange"]["label"], callback_data="orange", icon_custom_emoji_id=buttons_config["orange"]["emoji_id"], style="primary")
+            ],
+            [
+                InlineKeyboardButton(buttons_config["natra"]["label"], callback_data="natra", icon_custom_emoji_id=buttons_config["natra"]["emoji_id"], style="primary"),
+                InlineKeyboardButton(buttons_config["natra_family"]["label"], callback_data="natra_family", icon_custom_emoji_id=buttons_config["natra_family"]["emoji_id"], style="primary")
+            ],
+            [InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="back_main", style="danger")],
+        ]
+        await query.edit_message_text("خدمات سحب البيانات\n\nاختر الخدمة:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data == "back_accounts":
+        keyboard = [
+            [
+                InlineKeyboardButton(buttons_config["acc_facebook"]["label"], callback_data="acc_facebook", icon_custom_emoji_id=buttons_config["acc_facebook"]["emoji_id"], style="success"),
+                InlineKeyboardButton(buttons_config["acc_instagram"]["label"], callback_data="acc_instagram", icon_custom_emoji_id=buttons_config["acc_instagram"]["emoji_id"], style="success")
+            ],
+            [
+                InlineKeyboardButton(buttons_config["acc_telegram"]["label"], callback_data="acc_telegram", icon_custom_emoji_id=buttons_config["acc_telegram"]["emoji_id"], style="success"),
+                InlineKeyboardButton(buttons_config["acc_tiktok"]["label"], callback_data="acc_tiktok", icon_custom_emoji_id=buttons_config["acc_tiktok"]["emoji_id"], style="success")
+            ],
+            [InlineKeyboardButton(buttons_config["acc_youtube"]["label"], callback_data="acc_youtube", icon_custom_emoji_id=buttons_config["acc_youtube"]["emoji_id"], style="success")],
+            [InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="back_main", style="danger")],
+        ]
+        await query.edit_message_text("بيع وشراء أكونتات السوشيال ميديا\n\nاختر المنصة:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data == "back_numbers":
+        keyboard = [
+            [
+                InlineKeyboardButton(buttons_config["num_whatsapp"]["label"], callback_data="num_whatsapp", icon_custom_emoji_id=buttons_config["num_whatsapp"]["emoji_id"], style="primary"),
+                InlineKeyboardButton(buttons_config["num_telegram"]["label"], callback_data="num_telegram", icon_custom_emoji_id=buttons_config["num_telegram"]["emoji_id"], style="primary")
+            ],
+            [
+                InlineKeyboardButton(buttons_config["num_imo"]["label"], callback_data="num_imo", icon_custom_emoji_id=buttons_config["num_imo"]["emoji_id"], style="primary"),
+                InlineKeyboardButton("🔙 رجوع", callback_data="back_main", style="danger")
+            ],
+        ]
+        await query.edit_message_text("أرقام فيك\n\nاختر التطبيق:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    # ========== عرض الخدمة + زرار شراء ==========
+    elif data in buttons_config:
+        cfg = buttons_config[data]
+        if data in ["vodafone", "etisalat", "we", "orange", "natra", "natra_family"]:
+            back = "back_data"
+        elif data.startswith("acc_"):
+            back = "back_accounts"
+        else:
+            back = "back_numbers"
+
+        # التحقق من تفعيل الزر
+        if not button_enabled_states.get(data, True):
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 رجوع", callback_data=back, style="danger")],
+            ])
+            await query.edit_message_text(
+                "⚠️ هذه الخدمة غير متاحة حالياً.\n\nيرجى المحاولة لاحقاً أو التواصل مع المالك.",
+                reply_markup=keyboard
+            )
+            return
+
+        price = cfg.get("price", "")
+        # إذا عندها سعر → نظام الشراء، وإلا → تواصل مع المالك
+        if price:
+            detail_text = (
+                f"{cfg['details']}\n\n"
+                f"👑 @{OWNER_USERNAME}"
+            )
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"🛒 شراء — {price}", callback_data=f"buy_{data}", style="success")],
+                [InlineKeyboardButton("🔙 رجوع", callback_data=back, style="danger")],
+            ])
+        else:
+            link = cfg.get("link") or OWNER_LINK
+            detail_text = cfg["details"] + f"\n\n👑 @{OWNER_USERNAME}"
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📩 تواصل مع المالك", url=link, style="primary")],
+                [InlineKeyboardButton("🔙 رجوع", callback_data=back, style="danger")],
+            ])
+        await query.edit_message_text(detail_text, reply_markup=keyboard, parse_mode="HTML")
+
+    # ========== بدء عملية الشراء ==========
+    elif data.startswith("buy_"):
+        service_key = data.replace("buy_", "")
+        cfg         = buttons_config.get(service_key)
+        if not cfg:
+            await query.answer("خطأ!", show_alert=True)
+            return
+        cash_num = VODAFONE_CASH_NUMBER
+        text_msg = (
+            f"💳 <b>إتمام عملية الشراء</b>\n\n"
+            f"📦 الخدمة: <b>{cfg['label']}</b>\n"
+            f"💰 السعر: <b>{cfg.get('price','')}</b>\n\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📲 حوّل المبلغ على رقم فودافون كاش:\n"
+            f"<code>{cash_num}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
+            f"بعد التحويل اضغط <b>تم التحويل ✅</b> وأرسل:\n"
+            f"1️⃣ رقم الهاتف اللي حوّلت منه\n"
+            f"2️⃣ سكرين شوت التحويل"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ تم التحويل", callback_data=f"transferred_{service_key}", style="success")],
+            [InlineKeyboardButton("🔙 رجوع", callback_data=service_key, style="danger")],
+        ])
+        await query.edit_message_text(text_msg, reply_markup=keyboard, parse_mode="HTML")
+
+    # ========== المستخدم ضغط "تم التحويل" ==========
+    elif data.startswith("transferred_"):
+        service_key = data.replace("transferred_", "")
+        cfg         = buttons_config.get(service_key)
+        if not cfg:
+            await query.answer("خطأ!", show_alert=True)
+            return
+        # توليد order_id مؤقت للربط بالحالة
+        tmp_oid = f"tmp_{user.id}"
+        user_state[user.id] = {
+            "action":      "waiting_transfer_phone",
+            "service_key": service_key,
+            "order_id":    tmp_oid,
+        }
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_user_state", style="danger")]]
+        await query.edit_message_text(
+            "📱 أرسل <b>رقم الهاتف</b> الذي حوّلت منه (11 رقم يبدأ بـ 01):",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    # ========== الأدمن يسلّم البيانات ==========
+    elif data.startswith("deliver_"):
+        if not is_admin(user.id):
+            await query.answer("⛔ ليس لديك صلاحية!", show_alert=True)
+            return
+        oid = int(data.replace("deliver_", ""))
+        order = pending_orders.get(oid)
+        if not order:
+            await query.answer("الطلب غير موجود أو تم تسليمه مسبقاً!", show_alert=True)
+            return
+        if order.get("status") == "delivered":
+            await query.answer("✅ تم تسليم هذا الطلب مسبقاً!", show_alert=True)
+            return
+
+        admin_state[user.id] = {"action": "deliver_order", "order_id": oid}
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="cancel_deliver", style="danger")]]
+        await query.message.reply_text(
+            f"📦 <b>تسليم طلب #{oid}</b>\n\n"
+            f"👤 المستخدم: {order['user_name']}\n"
+            f"📦 الخدمة: {order['service_label']}\n\n"
+            "✍️ اكتب البيانات التي ستُرسل للمستخدم:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    elif data == "cancel_deliver":
+        if not is_admin(user.id): return
+        admin_state.pop(user.id, None)
+        await query.edit_message_text("❌ تم إلغاء التسليم.")
+
+    # ========== لوحة التحكم ==========
+    elif data == "admin_panel":
+        if not is_admin(user.id):
+            await query.answer("⛔ ليس لديك صلاحية!", show_alert=True)
+            return
+        await show_admin_panel(query)
+
+    elif data == "admin_manage_buttons":
+        if not is_admin(user.id): return
+        await show_manage_buttons(query)
+
+    elif data.startswith("mngbtn_"):
+        if not is_admin(user.id): return
+        btn_key = data.replace("mngbtn_", "")
+        await show_single_button_admin(query, btn_key)
+
+    elif data.startswith("editdetails_"):
+        if not is_admin(user.id): return
+        btn_key = data.replace("editdetails_", "")
+        admin_state[user.id] = {"action": "edit_btn_details", "btn_key": btn_key}
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data=f"mngbtn_{btn_key}", style="danger")]]
+        await query.edit_message_text(
+            f"✏️ تعديل تفاصيل زر: {buttons_config[btn_key]['label']}\n\n"
+            f"التفاصيل الحالية:\n{buttons_config[btn_key]['details']}\n\nأرسل النص الجديد:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data.startswith("editlink_"):
+        if not is_admin(user.id): return
+        btn_key = data.replace("editlink_", "")
+        admin_state[user.id] = {"action": "edit_btn_link", "btn_key": btn_key}
+        current = buttons_config[btn_key].get("link") or "الافتراضي (لينك المالك)"
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data=f"mngbtn_{btn_key}", style="danger")]]
+        await query.edit_message_text(
+            f"🔗 تعديل لينك زر: {buttons_config[btn_key]['label']}\n\n"
+            f"اللينك الحالي: {current}\n\nأرسل اللينك الجديد (أو - لإزالته):",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data.startswith("editprice_"):
+        if not is_admin(user.id): return
+        btn_key = data.replace("editprice_", "")
+        admin_state[user.id] = {"action": "edit_btn_price", "btn_key": btn_key}
+        current = buttons_config[btn_key].get("price") or "لا يوجد سعر"
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data=f"mngbtn_{btn_key}", style="danger")]]
+        await query.edit_message_text(
+            f"💰 تعديل سعر زر: {buttons_config[btn_key]['label']}\n\n"
+            f"السعر الحالي: {current}\n\nأرسل السعر الجديد (أو - لإزالته):",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data == "admin_manage_dev":
+        if not is_admin(user.id): return
+        await show_manage_dev(query)
+
+    elif data == "admin_dev_name":
+        if not is_admin(user.id): return
+        admin_state[user.id] = {"action": "edit_dev_name"}
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="admin_manage_dev", style="danger")]]
+        await query.edit_message_text(
+            f"✏️ تعديل اسم المطور\n\nالحالي: {developer_info['name']}\n\nأرسل الاسم الجديد:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data == "admin_dev_bio":
+        if not is_admin(user.id): return
+        admin_state[user.id] = {"action": "edit_dev_bio"}
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="admin_manage_dev", style="danger")]]
+        await query.edit_message_text(
+            f"📝 تعديل نبذة المطور\n\nالحالية:\n{developer_info['bio']}\n\nأرسل النبذة الجديدة:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data == "admin_dev_photo":
+        if not is_admin(user.id): return
+        admin_state[user.id] = {"action": "edit_dev_photo"}
+        current = "✅ موجودة" if developer_info.get("photo_id") else "❌ لا توجد"
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="admin_manage_dev", style="danger")]]
+        await query.edit_message_text(
+            f"🖼️ تعديل صورة المطور\n\nالصورة الحالية: {current}\n\n"
+            "أرسل الصورة مباشرة كصورة تليجرام، أو أرسل - لإزالتها:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data == "admin_manage_gifts":
+        if not is_admin(user.id): return
+        await show_manage_gifts(query)
+
+    elif data == "admin_add_gift":
+        if not is_admin(user.id): return
+        admin_state[user.id] = {"action": "add_gift_name"}
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="admin_manage_gifts", style="danger")]]
+        await query.edit_message_text("🎁 إضافة هدية جديدة\n\nأرسل اسم الهدية:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data == "admin_edit_gift":
+        if not is_admin(user.id): return
+        gifts = products_data["gifts"]
+        if not gifts:
+            await query.answer("لا توجد هدايا لتعديلها!", show_alert=True)
+            return
+        keyboard = [[InlineKeyboardButton(f"✏️ {g['name']}", callback_data=f"edit_gift_{i}", style="primary")]
+                    for i, g in enumerate(gifts)]
+        keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="admin_manage_gifts", style="danger")])
+        await query.edit_message_text("✏️ اختر الهدية للتعديل:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data.startswith("edit_gift_"):
+        if not is_admin(user.id): return
+        idx = int(data.replace("edit_gift_", ""))
+        admin_state[user.id] = {"action": "edit_gift", "index": idx, "step": "name"}
+        gift = products_data["gifts"][idx]
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="admin_manage_gifts", style="danger")]]
+        await query.edit_message_text(
+            f"✏️ تعديل: {gift['name']}\n\nأرسل الاسم الجديد (أو - للإبقاء):",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data == "admin_delete_gift":
+        if not is_admin(user.id): return
+        gifts = products_data["gifts"]
+        if not gifts:
+            await query.answer("لا توجد هدايا لحذفها!", show_alert=True)
+            return
+        keyboard = [[InlineKeyboardButton(f"🗑️ {g['name']}", callback_data=f"del_gift_{i}", style="danger")]
+                    for i, g in enumerate(gifts)]
+        keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="admin_manage_gifts", style="danger")])
+        await query.edit_message_text("🗑️ اختر الهدية للحذف:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data.startswith("del_gift_"):
+        if not is_admin(user.id): return
+        idx     = int(data.replace("del_gift_", ""))
+        removed = products_data["gifts"].pop(idx)
+        await query.answer(f"✅ تم حذف: {removed['name']}", show_alert=True)
+        await show_manage_gifts(query)
+
+    elif data == "admin_view_gifts":
+        if not is_admin(user.id): return
+        gifts = products_data["gifts"]
+        text  = "📋 قائمة الهدايا الحالية:\n\n"
+        if not gifts:
+            text += "❌ لا توجد هدايا."
+        else:
+            for i, g in enumerate(gifts, 1):
+                text += f"{i}. {g['name']} — 💰 {g['price']}"
+                if g.get("link"):
+                    text += f"\n   🔗 {g['link']}"
+                text += "\n\n"
+        keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="admin_manage_gifts", style="danger")]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    # ========== رسالة جماعية ==========
+    elif data == "admin_broadcast":
+        if not is_admin(user.id): return
+        admin_state[user.id] = {"action": "broadcast_message"}
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="admin_panel", style="danger")]]
+        await query.edit_message_text(
+            f"📢 <b>إرسال رسالة جماعية</b>\n\n"
+            f"👥 عدد المستخدمين: {len(bot_users)}\n\n"
+            "✍️ أرسل الرسالة التي تريد إرسالها لجميع مستخدمي البوت:\n"
+            "<i>(يمكنك إرسال نص، صورة، أو ستيكر)</i>",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    # ========== إدارة الأدمن المساعد ==========
+    elif data == "admin_manage_subadmin":
+        if not is_main_admin(user.id):
+            await query.answer("⛔ هذه الميزة للمالك والمطور فقط!", show_alert=True)
+            return
+        sub_list = "\n".join([f"• <code>{uid}</code>" for uid in SUB_ADMIN_IDS]) if SUB_ADMIN_IDS else "❌ لا يوجد أدمن مساعد حالياً"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ إضافة أدمن مساعد", callback_data="admin_add_subadmin", style="success")],
+            [InlineKeyboardButton("🗑️ حذف أدمن مساعد",  callback_data="admin_del_subadmin", style="danger")],
+            [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="admin_panel", style="danger")],
+        ])
+        await query.edit_message_text(
+            f"👥 <b>إدارة الأدمن المساعد</b>\n\n"
+            f"الأدمن المساعدون الحاليون:\n{sub_list}",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
+    elif data == "admin_add_subadmin":
+        if not is_main_admin(user.id): return
+        admin_state[user.id] = {"action": "add_subadmin"}
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="admin_manage_subadmin", style="danger")]]
+        await query.edit_message_text(
+            "➕ <b>إضافة أدمن مساعد</b>\n\n"
+            "أرسل الـ ID الخاص بالمستخدم الذي تريد تعيينه أدمن مساعداً:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+    elif data == "admin_del_subadmin":
+        if not is_main_admin(user.id): return
+        if not SUB_ADMIN_IDS:
+            await query.answer("لا يوجد أدمن مساعد لحذفه!", show_alert=True)
+            return
+        keyboard_rows = [[InlineKeyboardButton(f"🗑️ حذف {uid}", callback_data=f"delsubadmin_{uid}", style="danger")]
+                         for uid in SUB_ADMIN_IDS]
+        keyboard_rows.append([InlineKeyboardButton("🔙 رجوع", callback_data="admin_manage_subadmin", style="danger")])
+        await query.edit_message_text(
+            "🗑️ اختر الأدمن المساعد الذي تريد حذفه:",
+            reply_markup=InlineKeyboardMarkup(keyboard_rows)
+        )
+
+    elif data.startswith("delsubadmin_"):
+        if not is_main_admin(user.id): return
+        uid = int(data.replace("delsubadmin_", ""))
+        if uid in SUB_ADMIN_IDS:
+            SUB_ADMIN_IDS.remove(uid)
+            await query.answer(f"✅ تم حذف الأدمن {uid} بنجاح!", show_alert=True)
+        else:
+            await query.answer("الأدمن غير موجود!", show_alert=True)
+        # تحديث لوحة الأدمن المساعد
+        sub_list = "\n".join([f"• <code>{u}</code>" for u in SUB_ADMIN_IDS]) if SUB_ADMIN_IDS else "❌ لا يوجد أدمن مساعد حالياً"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ إضافة أدمن مساعد", callback_data="admin_add_subadmin", style="success")],
+            [InlineKeyboardButton("🗑️ حذف أدمن مساعد",  callback_data="admin_del_subadmin", style="danger")],
+            [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="admin_panel", style="danger")],
+        ])
+        await query.edit_message_text(
+            f"👥 <b>إدارة الأدمن المساعد</b>\n\n"
+            f"الأدمن المساعدون الحاليون:\n{sub_list}",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
+    # ========== تحكم في تشغيل/إيقاف الأزرار ==========
+    elif data == "admin_toggle_buttons":
+        if not is_admin(user.id): return
+        rows = []
+        labels = {
+            "vodafone": "فودافون", "etisalat": "اتصالات", "we": "وي", "orange": "أورنج",
+            "natra": "قسم نترا", "natra_family": "قيد عائلي نترا",
+            "acc_facebook": "فيسبوك", "acc_instagram": "إنستجرام", "acc_telegram": "تليجرام (أكونت)",
+            "acc_tiktok": "تيك توك", "acc_youtube": "يوتيوب",
+            "num_whatsapp": "واتساب (رقم)", "num_telegram": "تليجرام (رقم)", "num_imo": "إيمو",
+        }
+        keys = list(button_enabled_states.keys())
+        for i in range(0, len(keys), 2):
+            row = []
+            for k in keys[i:i+2]:
+                status = "✅" if button_enabled_states[k] else "❌"
+                label  = labels.get(k, k)
+                row.append(InlineKeyboardButton(f"{status} {label}", callback_data=f"toggle_btn_{k}", style="primary"))
+            rows.append(row)
+        rows.append([InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="admin_panel", style="danger")])
+        await query.edit_message_text(
+            "⚙️ <b>تحكم في الأزرار</b>\n\n"
+            "✅ = مفعّل | ❌ = معطّل\n\n"
+            "اضغط على أي زر لتغيير حالته:",
+            reply_markup=InlineKeyboardMarkup(rows),
+            parse_mode="HTML"
+        )
+
+    elif data.startswith("toggle_btn_"):
+        if not is_admin(user.id): return
+        btn_key = data.replace("toggle_btn_", "")
+        if btn_key in button_enabled_states:
+            button_enabled_states[btn_key] = not button_enabled_states[btn_key]
+            status = "مفعّل ✅" if button_enabled_states[btn_key] else "معطّل ❌"
+            btn_label = buttons_config.get(btn_key, {}).get("label", btn_key)
+            await query.answer(f"تم تغيير حالة {btn_label} إلى {status}", show_alert=True)
+        # إعادة عرض لوحة التحكم في الأزرار
+        labels = {
+            "vodafone": "فودافون", "etisalat": "اتصالات", "we": "وي", "orange": "أورنج",
+            "natra": "قسم نترا", "natra_family": "قيد عائلي نترا",
+            "acc_facebook": "فيسبوك", "acc_instagram": "إنستجرام", "acc_telegram": "تليجرام (أكونت)",
+            "acc_tiktok": "تيك توك", "acc_youtube": "يوتيوب",
+            "num_whatsapp": "واتساب (رقم)", "num_telegram": "تليجرام (رقم)", "num_imo": "إيمو",
+        }
+        keys = list(button_enabled_states.keys())
+        rows = []
+        for i in range(0, len(keys), 2):
+            row = []
+            for k in keys[i:i+2]:
+                st = "✅" if button_enabled_states[k] else "❌"
+                lbl = labels.get(k, k)
+                row.append(InlineKeyboardButton(f"{st} {lbl}", callback_data=f"toggle_btn_{k}", style="primary"))
+            rows.append(row)
+        rows.append([InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="admin_panel", style="danger")])
+        await query.edit_message_text(
+            "⚙️ <b>تحكم في الأزرار</b>\n\n"
+            "✅ = مفعّل | ❌ = معطّل\n\n"
+            "اضغط على أي زر لتغيير حالته:",
+            reply_markup=InlineKeyboardMarkup(rows),
+            parse_mode="HTML"
+        )
+
+    # ========== تغيير رقم فودافون كاش ==========
+    elif data == "admin_change_cash":
+        if not is_admin(user.id): return
+        admin_state[user.id] = {"action": "change_cash_number"}
+        keyboard = [[InlineKeyboardButton("❌ إلغاء", callback_data="admin_panel", style="danger")]]
+        await query.edit_message_text(
+            f"💳 <b>تغيير رقم فودافون كاش</b>\n\n"
+            f"الرقم الحالي: <code>{VODAFONE_CASH_NUMBER}</code>\n\n"
+            "أرسل الرقم الجديد (11 رقم يبدأ بـ 01):",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+
+# ==================== لوحة التحكم ====================
+def admin_main_keyboard(user_id: int = None):
+    rows = [
+        [InlineKeyboardButton("🔘 إدارة الأزرار",        callback_data="admin_manage_buttons", style="primary"),
+         InlineKeyboardButton("🎁 إدارة الهدايا",        callback_data="admin_manage_gifts", style="success")],
+        [InlineKeyboardButton("👨‍💻 إدارة صفحة المطور",   callback_data="admin_manage_dev", style="primary")],
+        [InlineKeyboardButton("💳 تغيير رقم فودافون كاش", callback_data="admin_change_cash", style="primary")],
+        [InlineKeyboardButton("📢 رسالة جماعية",          callback_data="admin_broadcast", style="primary"),
+         InlineKeyboardButton("⚙️ تحكم في الأزرار",      callback_data="admin_toggle_buttons", style="primary")],
+    ]
+    # إدارة الأدمن المساعد فقط للأدمن الرئيسيين
+    if user_id and is_main_admin(user_id):
+        rows.append([InlineKeyboardButton("👥 إدارة الأدمن المساعد", callback_data="admin_manage_subadmin", style="primary")])
+    rows.append([InlineKeyboardButton("🔙 إغلاق", callback_data="back_main", style="danger")])
+    return InlineKeyboardMarkup(rows)
+
+async def send_admin_panel(message, user_id: int = None):
+    await message.reply_text(
+        f"⚙️ لوحة تحكم الأدمن\n\n"
+        f"💳 رقم كاش الحالي: <code>{VODAFONE_CASH_NUMBER}</code>\n\n"
+        "اختر القسم الذي تريد إدارته:",
+        reply_markup=admin_main_keyboard(user_id),
+        parse_mode="HTML"
+    )
+
+async def show_admin_panel(query):
+    await query.edit_message_text(
+        f"⚙️ لوحة تحكم الأدمن\n\n"
+        f"💳 رقم كاش الحالي: <code>{VODAFONE_CASH_NUMBER}</code>\n\n"
+        "اختر القسم الذي تريد إدارته:",
+        reply_markup=admin_main_keyboard(query.from_user.id),
+        parse_mode="HTML"
+    )
+
+async def show_manage_buttons(query):
+    keys = list(buttons_config.keys())
+    rows = []
+    for i in range(0, len(keys), 2):
+        row = [InlineKeyboardButton(buttons_config[k]["label"], callback_data=f"mngbtn_{k}", style="primary")
+               for k in keys[i:i+2]]
+        rows.append(row)
+    rows.append([InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="admin_panel", style="danger")])
+    await query.edit_message_text(
+        "🔘 إدارة الأزرار\n\nاختر الزر الذي تريد التحكم فيه:",
+        reply_markup=InlineKeyboardMarkup(rows)
+    )
+
+async def show_single_button_admin(query, btn_key: str):
+    cfg = buttons_config.get(btn_key)
+    if not cfg:
+        await query.answer("زر غير موجود!", show_alert=True)
+        return
+    link_display  = cfg.get("link") or "الافتراضي (لينك المالك)"
+    price_display = cfg.get("price") or "لا يوجد"
+    text = (
+        f"⚙️ إدارة زر: {cfg['label']}\n\n"
+        f"📝 التفاصيل الحالية:\n{cfg['details']}\n\n"
+        f"💰 السعر الحالي: {price_display}\n"
+        f"🔗 اللينك الحالي: {link_display}"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ تعديل التفاصيل", callback_data=f"editdetails_{btn_key}", style="primary"),
+         InlineKeyboardButton("🔗 تعديل اللينك",   callback_data=f"editlink_{btn_key}", style="primary")],
+        [InlineKeyboardButton("💰 تعديل السعر",     callback_data=f"editprice_{btn_key}", style="primary")],
+        [InlineKeyboardButton("🔙 رجوع لقائمة الأزرار", callback_data="admin_manage_buttons", style="danger")],
+    ])
+    await query.edit_message_text(text, reply_markup=keyboard)
+
+async def show_manage_gifts(query):
+    gifts_count = len(products_data["gifts"])
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 عرض الهدايا",  callback_data="admin_view_gifts", style="primary"),
+         InlineKeyboardButton("➕ إضافة هدية",   callback_data="admin_add_gift", style="success")],
+        [InlineKeyboardButton("✏️ تعديل هدية",   callback_data="admin_edit_gift", style="primary"),
+         InlineKeyboardButton("🗑️ حذف هدية",    callback_data="admin_delete_gift", style="danger")],
+        [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="admin_panel", style="danger")],
+    ])
+    await query.edit_message_text(
+        f"🎁 إدارة الهدايا\n\nعدد الهدايا: {gifts_count}\n\nاختر:",
+        reply_markup=keyboard
+    )
+
+async def show_manage_dev(query):
+    dev          = developer_info
+    photo_status = "✅ موجودة" if dev.get("photo_id") else "❌ لا توجد"
+    text = (
+        f"👨‍💻 إدارة صفحة المطور\n\n"
+        f"الاسم: {dev['name']}\n"
+        f"الصورة: {photo_status}\n\n"
+        "اختر ما تريد تعديله:"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ تعديل الاسم",  callback_data="admin_dev_name", style="primary"),
+         InlineKeyboardButton("📝 تعديل النبذة", callback_data="admin_dev_bio", style="primary")],
+        [InlineKeyboardButton("🖼️ تعديل الصورة", callback_data="admin_dev_photo", style="primary")],
+        [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="admin_panel", style="danger")],
+    ])
+    await query.edit_message_text(text, reply_markup=keyboard)
+
+# ==================== معالج مدخلات الأدمن ====================
+async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                              text: str, state: dict):
+    global VODAFONE_CASH_NUMBER
+    user   = update.effective_user
+    action = state.get("action")
+
+    def back_btn(cb): return [[InlineKeyboardButton("🔙 رجوع", callback_data=cb, style="danger")]]
+
+    if action == "broadcast_message":
+        del admin_state[user.id]
+        success_count = 0
+        fail_count    = 0
+        wait_msg = await update.message.reply_text("📤 جاري إرسال الرسالة الجماعية...")
+        for uid in list(bot_users):
+            if uid == user.id:
+                continue
+            try:
+                await context.bot.copy_message(
+                    chat_id=uid,
+                    from_chat_id=update.message.chat_id,
+                    message_id=update.message.message_id
+                )
+                success_count += 1
+            except Exception:
+                fail_count += 1
+        await wait_msg.edit_text(
+            f"✅ <b>تم إرسال الرسالة الجماعية</b>\n\n"
+            f"✅ تم الإرسال: {success_count} مستخدم\n"
+            f"❌ فشل الإرسال: {fail_count} مستخدم",
+            reply_markup=InlineKeyboardMarkup(back_btn("admin_panel")),
+            parse_mode="HTML"
+        )
+
+    elif action == "add_subadmin":
+        uid_str = text.strip()
+        if not uid_str.isdigit():
+            await update.message.reply_text("❌ يجب إرسال رقم ID صحيح (أرقام فقط):")
+            return
+        uid = int(uid_str)
+        if uid in ADMIN_IDS:
+            await update.message.reply_text(
+                "⚠️ هذا المستخدم أدمن رئيسي بالفعل!",
+                reply_markup=InlineKeyboardMarkup(back_btn("admin_manage_subadmin"))
+            )
+        elif uid in SUB_ADMIN_IDS:
+            await update.message.reply_text(
+                "⚠️ هذا المستخدم مضاف كأدمن مساعد بالفعل!",
+                reply_markup=InlineKeyboardMarkup(back_btn("admin_manage_subadmin"))
+            )
+        else:
+            SUB_ADMIN_IDS.append(uid)
+            del admin_state[user.id]
+            await update.message.reply_text(
+                f"✅ تمت إضافة الأدمن المساعد!\n\n🆔 الـ ID: <code>{uid}</code>",
+                reply_markup=InlineKeyboardMarkup(back_btn("admin_manage_subadmin")),
+                parse_mode="HTML"
+            )
+        return
+
+    elif action == "change_cash_number":
+        new_num = text.strip()
+        if not new_num.startswith("01") or len(new_num) != 11 or not new_num.isdigit():
+            await update.message.reply_text("❌ رقم غير صحيح! أرسل 11 رقم يبدأ بـ 01:")
+            return
+        VODAFONE_CASH_NUMBER = new_num
+        del admin_state[user.id]
+        await update.message.reply_text(
+            f"✅ تم تغيير رقم فودافون كاش إلى: <code>{VODAFONE_CASH_NUMBER}</code>",
+            reply_markup=InlineKeyboardMarkup(back_btn("admin_panel")),
+            parse_mode="HTML"
+        )
+
+    elif action == "deliver_order":
+        oid   = state["order_id"]
+        order = pending_orders.get(oid)
+        if not order:
+            del admin_state[user.id]
+            await update.message.reply_text("❌ الطلب غير موجود!")
+            return
+        data_text = text.strip()
+        order["status"] = "delivered"
+        del admin_state[user.id]
+        # إرسال البيانات للمستخدم
+        try:
+            await context.bot.send_message(
+                chat_id=order["user_id"],
+                text=(
+                    f"✅ <b>تم تسليم طلبك #{oid}</b>\n\n"
+                    f"📦 الخدمة: {order['service_label']}\n\n"
+                    f"📋 <b>البيانات:</b>\n{data_text}"
+                ),
+                parse_mode="HTML"
+            )
+            await update.message.reply_text(
+                f"✅ تم إرسال البيانات للمستخدم بنجاح!\n\nالطلب #{oid} مكتمل.",
+                reply_markup=InlineKeyboardMarkup(back_btn("admin_panel"))
+            )
+        except Exception as e:
+            await update.message.reply_text(f"❌ فشل الإرسال للمستخدم: {e}")
+
+    elif action == "edit_btn_details":
+        btn_key = state["btn_key"]
+        buttons_config[btn_key]["details"] = text.strip()
+        del admin_state[user.id]
+        await update.message.reply_text(
+            f"✅ تم تحديث تفاصيل زر {buttons_config[btn_key]['label']}!",
+            reply_markup=InlineKeyboardMarkup(back_btn(f"mngbtn_{btn_key}"))
+        )
+
+    elif action == "edit_btn_link":
+        btn_key = state["btn_key"]
+        buttons_config[btn_key]["link"] = "" if text.strip() == "-" else text.strip()
+        del admin_state[user.id]
+        await update.message.reply_text(
+            f"✅ تم تحديث لينك زر {buttons_config[btn_key]['label']}!",
+            reply_markup=InlineKeyboardMarkup(back_btn(f"mngbtn_{btn_key}"))
+        )
+
+    elif action == "edit_btn_price":
+        btn_key = state["btn_key"]
+        buttons_config[btn_key]["price"] = "" if text.strip() == "-" else text.strip()
+        del admin_state[user.id]
+        await update.message.reply_text(
+            f"✅ تم تحديث سعر زر {buttons_config[btn_key]['label']}!",
+            reply_markup=InlineKeyboardMarkup(back_btn(f"mngbtn_{btn_key}"))
+        )
+
+    elif action == "edit_dev_name":
+        developer_info["name"] = text.strip()
+        del admin_state[user.id]
+        await update.message.reply_text(
+            "✅ تم تحديث اسم المطور!",
+            reply_markup=InlineKeyboardMarkup(back_btn("admin_manage_dev"))
+        )
+
+    elif action == "edit_dev_bio":
+        developer_info["bio"] = text.strip()
+        del admin_state[user.id]
+        await update.message.reply_text(
+            "✅ تم تحديث نبذة المطور!",
+            reply_markup=InlineKeyboardMarkup(back_btn("admin_manage_dev"))
+        )
+
+    elif action == "edit_dev_photo":
+        if text.strip() == "-":
+            developer_info["photo_id"] = ""
+            del admin_state[user.id]
+            await update.message.reply_text(
+                "✅ تم إزالة صورة المطور!",
+                reply_markup=InlineKeyboardMarkup(back_btn("admin_manage_dev"))
+            )
+        else:
+            await update.message.reply_text("📸 أرسل الصورة مباشرة كصورة تليجرام، أو أرسل - للإزالة:")
+
+    elif action == "add_gift_name":
+        admin_state[user.id] = {"action": "add_gift_price", "name": text}
+        await update.message.reply_text("💰 أرسل سعر الهدية:")
+
+    elif action == "add_gift_price":
+        admin_state[user.id]["price"]  = text
+        admin_state[user.id]["action"] = "add_gift_link"
+        await update.message.reply_text("🔗 أرسل لينك الأكونت (أو - لتركه فارغاً):")
+
+    elif action == "add_gift_link":
+        link  = "" if text.strip() == "-" else text.strip()
+        name  = admin_state[user.id]["name"]
+        price = admin_state[user.id]["price"]
+        products_data["gifts"].append({"name": name, "price": price, "link": link})
+        del admin_state[user.id]
+        await update.message.reply_text(
+            f"✅ تمت الإضافة!\n\n🎁 {name}\n💰 {price}\n🔗 {link or 'لا يوجد'}",
+            reply_markup=InlineKeyboardMarkup(back_btn("admin_manage_gifts"))
+        )
+
+    elif action == "edit_gift":
+        step = state.get("step")
+        idx  = state.get("index")
+
+        if step == "name":
+            if text.strip() != "-":
+                products_data["gifts"][idx]["name"] = text.strip()
+            admin_state[user.id]["step"] = "price"
+            await update.message.reply_text(
+                f"💰 أرسل السعر الجديد (أو - للإبقاء على: {products_data['gifts'][idx]['price']}):"
+            )
+
+        elif step == "price":
+            if text.strip() != "-":
+                products_data["gifts"][idx]["price"] = text.strip()
+            admin_state[user.id]["step"] = "link"
+            current = products_data["gifts"][idx].get("link") or "لا يوجد"
+            await update.message.reply_text(
+                f"🔗 أرسل اللينك الجديد (أو - للإبقاء على: {current}):"
+            )
+
+        elif step == "link":
+            if text.strip() != "-":
+                val = text.strip()
+                products_data["gifts"][idx]["link"] = "" if val.lower() == "none" else val
+            del admin_state[user.id]
+            g = products_data["gifts"][idx]
+            await update.message.reply_text(
+                f"✅ تم التعديل!\n\n🎁 {g['name']}\n💰 {g['price']}\n🔗 {g.get('link') or 'لا يوجد'}",
+                reply_markup=InlineKeyboardMarkup(back_btn("admin_manage_gifts"))
+            )
+
+def main():
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
+    logger.info("✅ البوت شغال!")
+    print("✅ البوت شغال!")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
